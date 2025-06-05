@@ -142,6 +142,13 @@
         <input type="text" id="customKey" placeholder="Enter custom key to test" style="width: 200px;">
         <button onclick="analyzeTokens()">🔍 Analyze Tokens</button>
         
+        <div style="margin: 15px 0; padding: 10px; background: #1a1a1a; border-radius: 4px;">
+            <label>📁 Custom Wordlist:</label>
+            <input type="file" id="wordlistFile" accept=".txt" style="margin: 5px;">
+            <button onclick="loadWordlist()">📤 Load Wordlist</button>
+            <span id="wordlistStatus" style="margin-left: 10px; font-size: 12px;"></span>
+        </div>
+        
         <div class="progress" id="progressContainer" style="display: none;">
             <div class="progress-bar" id="progressBar"></div>
         </div>
@@ -150,6 +157,110 @@
     </div>
 
     <script>
+        // Global wordlist variable
+        let customWordlist = [];
+        let usingCustomWordlist = false;
+
+        // Get wordlist (custom or default) - MOVED UP BEFORE OTHER FUNCTIONS
+        function getWordlist() {
+            if (usingCustomWordlist && customWordlist.length > 0) {
+                return customWordlist;
+            }
+            
+            // Default wordlist
+            return [
+                // Empty and basic
+                '', ' ', 'null', 'undefined', 'none', 'default', 'test', 'demo',
+                
+                // Numbers
+                '0', '1', '12', '123', '1234', '12345', '123456', '1234567', '12345678', '123456789',
+                
+                // Common passwords
+                'password', 'secret', 'admin', 'root', 'user', 'guest', 'public', 'private',
+                
+                // JWT specific
+                'jwt', 'token', 'auth', 'bearer', 'key', 'secretkey', 'jwtkey', 'authkey',
+                'jwt-secret', 'jwt_secret', 'jwtsecret', 'JWT_SECRET', 'JWTSECRET',
+                'jwt-key', 'jwt_key', 'jwtKey', 'JWTKey', 'JWT_KEY',
+                
+                // HMAC specific
+                'hmac', 'hmackey', 'hmac-key', 'hmac_key', 'HMAC_KEY',
+                'hs256', 'hs256-key', 'hs256_key', 'HS256_KEY',
+                'hs384', 'hs384-key', 'hs384_key', 'HS384_KEY',
+                'hs512', 'hs512-key', 'hs512_key', 'HS512_KEY',
+                
+                // Application patterns
+                'app', 'api', 'server', 'client', 'web', 'mobile',
+                'app-secret', 'api-secret', 'server-secret', 'web-secret',
+                'myapp', 'myapi', 'myserver', 'webapp', 'webapi',
+                'application', 'service', 'microservice',
+                
+                // Security related
+                'security', 'secure', 'crypto', 'hash', 'sign', 'verify',
+                'session', 'login', 'logout', 'signin', 'signup', 'auth',
+                'authentication', 'authorization', 'access', 'permission',
+                
+                // Development environments
+                'dev', 'development', 'prod', 'production', 'staging', 'local',
+                'localhost', 'dev-secret', 'prod-secret', 'staging-secret',
+                
+                // Framework specific
+                'spring', 'boot', 'express', 'node', 'nodejs', 'react', 'angular',
+                'laravel', 'django', 'flask', 'rails', 'symfony', 'asp', 'dotnet',
+                
+                // Common words
+                'hello', 'world', 'welcome', 'home', 'index', 'main', 'start',
+                'qwerty', 'asdf', 'zxcv', 'qwertyuiop', 'asdfghjkl', 'zxcvbnm',
+                'letmein', 'changeme', 'please', 'thanks', 'sorry',
+                
+                // Company/project names (common)
+                'company', 'project', 'team', 'organization', 'corp',
+                'example', 'sample', 'template', 'boilerplate', 'starter',
+                
+                // Base64 common strings
+                'c2VjcmV0', 'YWRtaW4=', 'cGFzc3dvcmQ=', 'dGVzdA==',
+                
+                // Years and dates
+                '2023', '2024', '2025', '20231', '20241', '20251',
+                
+                // Keyboard patterns
+                '12345qwert', 'qwerty123', 'abc123', '123abc', 'password123',
+                'admin123', 'secret123', 'test123', 'demo123'
+            ];
+        }
+
+        // Load custom wordlist from file
+        async function loadWordlist() {
+            const fileInput = document.getElementById('wordlistFile');
+            const statusSpan = document.getElementById('wordlistStatus');
+            
+            if (!fileInput.files[0]) {
+                updateResults('Please select a wordlist file', 'error');
+                return;
+            }
+            
+            const file = fileInput.files[0];
+            
+            try {
+                const text = await file.text();
+                customWordlist = text.split('\n')
+                    .map(line => line.trim())
+                    .filter(line => line.length > 0);
+                
+                usingCustomWordlist = true;
+                statusSpan.textContent = `✅ Loaded ${customWordlist.length} keys`;
+                statusSpan.className = 'success';
+                
+                updateResults(`📁 Custom wordlist loaded: ${customWordlist.length} keys`, 'success');
+                updateResults('Sample keys: ' + customWordlist.slice(0, 5).join(', '), 'info');
+                
+            } catch (error) {
+                updateResults(`Error loading wordlist: ${error.message}`, 'error');
+                statusSpan.textContent = '❌ Load failed';
+                statusSpan.className = 'error';
+            }
+        }
+
         // HMAC functions for different algorithms
         async function hmacSHA256(key, message) {
             const encoder = new TextEncoder();
@@ -367,66 +478,16 @@
             updateResults(`Token 1 signature: ${jwt1.signature.substring(0, 20)}...`, 'info');
             updateResults(`Token 2 signature: ${jwt2.signature.substring(0, 20)}...`, 'info');
 
-            // Comprehensive wordlist
-            const wordlist = [
-                // Empty and basic
-                '', ' ', 'null', 'undefined', 'none', 'default', 'test', 'demo',
-                
-                // Numbers
-                '0', '1', '12', '123', '1234', '12345', '123456', '1234567', '12345678', '123456789',
-                
-                // Common passwords
-                'password', 'secret', 'admin', 'root', 'user', 'guest', 'public', 'private',
-                
-                // JWT specific
-                'jwt', 'token', 'auth', 'bearer', 'key', 'secretkey', 'jwtkey', 'authkey',
-                'jwt-secret', 'jwt_secret', 'jwtsecret', 'JWT_SECRET', 'JWTSECRET',
-                'jwt-key', 'jwt_key', 'jwtKey', 'JWTKey', 'JWT_KEY',
-                
-                // HMAC specific
-                'hmac', 'hmackey', 'hmac-key', 'hmac_key', 'HMAC_KEY',
-                'hs256', 'hs256-key', 'hs256_key', 'HS256_KEY',
-                'hs384', 'hs384-key', 'hs384_key', 'HS384_KEY',
-                'hs512', 'hs512-key', 'hs512_key', 'HS512_KEY',
-                
-                // Application patterns
-                'app', 'api', 'server', 'client', 'web', 'mobile',
-                'app-secret', 'api-secret', 'server-secret', 'web-secret',
-                'myapp', 'myapi', 'myserver', 'webapp', 'webapi',
-                'application', 'service', 'microservice',
-                
-                // Security related
-                'security', 'secure', 'crypto', 'hash', 'sign', 'verify',
-                'session', 'login', 'logout', 'signin', 'signup', 'auth',
-                'authentication', 'authorization', 'access', 'permission',
-                
-                // Development environments
-                'dev', 'development', 'prod', 'production', 'staging', 'local',
-                'localhost', 'dev-secret', 'prod-secret', 'staging-secret',
-                
-                // Framework specific
-                'spring', 'boot', 'express', 'node', 'nodejs', 'react', 'angular',
-                'laravel', 'django', 'flask', 'rails', 'symfony', 'asp', 'dotnet',
-                
-                // Common words
-                'hello', 'world', 'welcome', 'home', 'index', 'main', 'start',
-                'qwerty', 'asdf', 'zxcv', 'qwertyuiop', 'asdfghjkl', 'zxcvbnm',
-                'letmein', 'changeme', 'please', 'thanks', 'sorry',
-                
-                // Company/project names (common)
-                'company', 'project', 'team', 'organization', 'corp',
-                'example', 'sample', 'template', 'boilerplate', 'starter',
-                
-                // Base64 common strings
-                'c2VjcmV0', 'YWRtaW4=', 'cGFzc3dvcmQ=', 'dGVzdA==',
-                
-                // Years and dates
-                '2023', '2024', '2025', '20231', '20241', '20251',
-                
-                // Keyboard patterns
-                '12345qwert', 'qwerty123', 'abc123', '123abc', 'password123',
-                'admin123', 'secret123', 'test123', 'demo123'
-            ];
+            // Get wordlist (custom or default)
+            const wordlist = getWordlist();
+            
+            if (usingCustomWordlist && customWordlist.length > 0) {
+                updateResults(`📁 Using custom wordlist with ${wordlist.length} keys`, 'success');
+                updateResults(`First 5 custom keys: ${wordlist.slice(0, 5).join(', ')}`, 'info');
+            } else {
+                updateResults(`📋 Using default wordlist with ${wordlist.length} keys`, 'info');
+                updateResults(`First 5 default keys: ${wordlist.slice(0, 5).join(', ')}`, 'info');
+            }
 
             let found = false;
             let testedCount = 0;
